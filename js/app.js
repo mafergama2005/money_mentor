@@ -13,7 +13,7 @@ const LEGACY_GOALS_KEY = "moneymentor_goals_v1";
 // ======================================
 
 // Dirección del backend publicado en Render (cámbiala por la tuya)
-const PRODUCTION_API_URL = "https://TU-SERVICIO.onrender.com/api";
+const PRODUCTION_API_URL = "https://money-mentor-awyd.onrender.com/";
 
 // En tu computadora usa el servidor local; en GitHub Pages o en el APK, el de Render
 const IS_LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname) || location.protocol === "file:";

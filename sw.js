@@ -4,7 +4,7 @@
    No toca las peticiones a la API: los datos siempre vienen de MySQL.
 ========================================== */
 
-const CACHE_NAME = "moneymentor-v1";
+const CACHE_NAME = "moneymentor-v2";
 
 const APP_SHELL = [
     "./",

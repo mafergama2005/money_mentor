@@ -2,22 +2,22 @@
    MONEYMENTOR — LÓGICA DE LA APLICACIÓN
 ========================================== */
 
-// Claves del prototipo anterior (solo se usan para limpiar el navegador)
-const USERS_KEY = "moneymentor_users_v1";
-const SESSION_KEY = "moneymentor_session_v1";
-const LEGACY_MOVEMENTS_KEY = "moneymentor_movements_v1";
-const LEGACY_GOALS_KEY = "moneymentor_goals_v1";
-
 // ======================================
 // CONEXIÓN CON EL BACKEND DE MONEYMENTOR
 // ======================================
 
-// Dirección del backend publicado en Render (cámbiala por la tuya)
-const PRODUCTION_API_URL = "https://money-mentor-awyd.onrender.com/";
+// Dirección del backend publicado en Render
+const PRODUCTION_SERVER = "https://money-mentor-awyd.onrender.com";
+const LOCAL_SERVER = "http://localhost:3000";
 
 // En tu computadora usa el servidor local; en GitHub Pages o en el APK, el de Render
 const IS_LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname) || location.protocol === "file:";
-const API_URL = IS_LOCAL ? "http://localhost:3000/api" : PRODUCTION_API_URL;
+
+// Siempre termina en /api, aunque la dirección se escriba con diagonal final o ya incluya /api
+function buildApiUrl(server) {
+    return server.replace(/\/+$/, "").replace(/\/api$/, "") + "/api";
+}
+const API_URL = buildApiUrl(IS_LOCAL ? LOCAL_SERVER : PRODUCTION_SERVER);
 const AUTH_TOKEN_KEY = "moneymentor_auth_token";
 
 function getAuthToken() {
@@ -92,6 +92,13 @@ async function apiRequest(endpoint, options = {}) {
     return data;
 }
 
+/* El plan gratuito de Render se duerme: se "despierta" en cuanto abre la app,
+   para que esté listo cuando la persona termine de escribir su correo */
+function wakeUpServer() {
+    if (IS_LOCAL) return;
+    fetch(`${API_URL}/health`, { cache: "no-store" }).catch(() => {});
+}
+
 const DEMO_EMAIL = "demo@moneymentor.mx";
 const DEMO_PASSWORD = "demo12345";
 const MIN_PASSWORD = 8;
@@ -102,7 +109,6 @@ const CATEGORIES = {
 };
 
 const GOAL_ICONS = ["star", "plane", "home", "laptop", "car", "gift", "shield", "wallet"];
-const LEGACY_ICONS = { "✈": "plane", "⌂": "home", "▣": "laptop", "☆": "star" };
 
 const TOPICS = [
     { id: "t1", category: "basics", icon: "chart", level: "Básico", minutes: 5,
@@ -164,17 +170,6 @@ function saveData(key, data) {
 const userKey = name => `moneymentor_${name}_${currentUser.id}`;
 
 function saveNotifications() { saveData(userKey("notifications"), notifications); }
-
-/* Borra los datos que el prototipo anterior guardaba en el navegador */
-function cleanupLegacyStorage() {
-    [USERS_KEY, SESSION_KEY, LEGACY_MOVEMENTS_KEY, LEGACY_GOALS_KEY].forEach(key => {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
-    });
-    Object.keys(localStorage)
-        .filter(key => /^moneymentor_(movements|goals)_/.test(key))
-        .forEach(key => localStorage.removeItem(key));
-}
 
 /* Convierte el usuario de MySQL al formato que usa la interfaz */
 function mapUserFromApi(u) {
@@ -340,7 +335,6 @@ function setLoading(button, loading) {
     button.disabled = loading;
 }
 
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /* ==========================================
    CONTRASEÑAS
@@ -812,7 +806,7 @@ function showSection(sectionId) {
     });
 
     // Barra lateral, barra inferior y hoja "Más"
-    const inMore = ["simulatorSection", "assistantSection", "aiSection", "profileSection"].includes(sectionId);
+    const inMore = ["simulatorSection", "aiSection", "profileSection"].includes(sectionId);
     document.querySelectorAll(".nav-link, .nav-item").forEach(button => {
         const active = button.dataset.section === sectionId || (inMore && button.hasAttribute("data-more"));
         button.classList.toggle("active", active);
@@ -1801,64 +1795,6 @@ $("simulatorForm").addEventListener("submit", event => {
 });
 
 /* ==========================================
-   ASISTENTE DEMOSTRATIVO
-========================================== */
-
-function botReply(message) {
-    const lower = message.toLowerCase();
-    const totals = getTotals();
-
-    if (lower.includes("gasto") || lower.includes("gastado"))
-        return "Tus gastos registrados suman " + formatMoney(totals.expenses) + ". Puedes revisar el detalle en la sección Movimientos.";
-    if (lower.includes("ahorr"))
-        return "Actualmente tienes registrados " + formatMoney(totals.savings) + " en la categoría de ahorro. Establece una cantidad que puedas guardar de manera constante.";
-    if (lower.includes("ingreso"))
-        return "Tus ingresos registrados suman " + formatMoney(totals.income) + ". Recuerda registrar todos tus ingresos para tener un balance más completo.";
-    if (lower.includes("balance") || lower.includes("dinero"))
-        return "Tu balance actual es de " + formatMoney(totals.balance) + ". Revisa tus movimientos para conocer cómo se distribuye tu dinero.";
-    if (lower.includes("presupuesto"))
-        return "Para crear un presupuesto, identifica tus ingresos, separa tus gastos necesarios y establece un límite para los gastos personales. Una guía común es 50% necesidades, 30% gustos y 20% ahorro.";
-    if (lower.includes("meta"))
-        return goals.length ? `Tienes ${goals.length} meta(s). La principal es "${goals[0].name}" con ${formatMoney(goals[0].saved)} de ${formatMoney(goals[0].target)}.` : "Aún no tienes metas. Puedes crear una en la sección Metas.";
-    return "Una buena práctica es registrar tus ingresos y gastos, establecer prioridades y revisar tu presupuesto cada semana.";
-}
-
-function addBubble(text, who) {
-    const bubble = document.createElement("div");
-    bubble.className = "chat-bubble " + who;
-    bubble.textContent = text;
-    $("chatMessages").appendChild(bubble);
-    $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
-    return bubble;
-}
-
-async function sendChat(message) {
-    message = message.trim();
-    if (!message) return;
-    addBubble(message, "user");
-    $("chatMessage").value = "";
-
-    const typing = document.createElement("div");
-    typing.className = "chat-bubble bot typing";
-    typing.innerHTML = "<i></i><i></i><i></i>";
-    $("chatMessages").appendChild(typing);
-    $("chatMessages").scrollTop = $("chatMessages").scrollHeight;
-
-    await wait(650);
-    typing.remove();
-    addBubble(botReply(message), "bot");
-}
-
-$("chatForm").addEventListener("submit", event => {
-    event.preventDefault();
-    sendChat($("chatMessage").value);
-});
-
-$("chatSuggestions").addEventListener("click", event => {
-    if (event.target.tagName === "BUTTON") sendChat(event.target.textContent);
-});
-
-/* ==========================================
    MENTOR IA (salud financiera con IA)
    La pregunta se envía al backend, que agrega los datos del usuario
    desde MySQL y consulta al proveedor de IA. La clave nunca llega
@@ -2136,7 +2072,7 @@ const TOUR_STEPS = [
         selector: ".bottom-nav",
         section: "homeSection",
         title: "Navegación principal",
-        body: "Muévete entre Inicio, Movimientos, Metas, Aprender y el menú Más (Simuladores, Asistente, Mentor IA y Perfil)."
+        body: "Muévete entre Inicio, Movimientos, Metas, Aprender y el menú Más (Simuladores, Mentor IA y Perfil)."
     }
 ];
 
@@ -2253,7 +2189,7 @@ function renderAll() {
 ========================================== */
 
 selectSimulator("saving");
-cleanupLegacyStorage();
+wakeUpServer();
 restoreSession().then(restored => {
     if (!restored && !currentUser) showScreen("loginScreen");
 });

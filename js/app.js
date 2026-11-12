@@ -12,7 +12,12 @@ const LEGACY_GOALS_KEY = "moneymentor_goals_v1";
 // CONEXIÓN CON EL BACKEND DE MONEYMENTOR
 // ======================================
 
-const API_URL = "http://localhost:3000/api";
+// Dirección del backend publicado en Render (cámbiala por la tuya)
+const PRODUCTION_API_URL = "https://TU-SERVICIO.onrender.com/api";
+
+// En tu computadora usa el servidor local; en GitHub Pages o en el APK, el de Render
+const IS_LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname) || location.protocol === "file:";
+const API_URL = IS_LOCAL ? "http://localhost:3000/api" : PRODUCTION_API_URL;
 const AUTH_TOKEN_KEY = "moneymentor_auth_token";
 
 function getAuthToken() {
@@ -36,6 +41,8 @@ function clearAuthToken() {
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
+let serverWakeNoticeShown = false;
+
 async function apiRequest(endpoint, options = {}) {
     const token = getAuthToken();
 
@@ -48,6 +55,14 @@ async function apiRequest(endpoint, options = {}) {
         headers.Authorization = `Bearer ${token}`;
     }
 
+    // El plan gratuito de Render se duerme tras 15 min sin uso y tarda en despertar
+    const wakeUpTimer = setTimeout(() => {
+        if (!serverWakeNoticeShown) {
+            serverWakeNoticeShown = true;
+            toast("El servidor se está activando. La primera vez puede tardar hasta un minuto.", "info");
+        }
+    }, 5000);
+
     let response;
     try {
         response = await fetch(`${API_URL}${endpoint}`, {
@@ -55,11 +70,13 @@ async function apiRequest(endpoint, options = {}) {
             headers
         });
     } catch {
+        clearTimeout(wakeUpTimer);
         const error = new Error("No se pudo conectar con el servidor. Verifica que el backend esté encendido (node server.js en la carpeta backend).");
         error.status = 0;
         throw error;
     }
 
+    clearTimeout(wakeUpTimer);
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
